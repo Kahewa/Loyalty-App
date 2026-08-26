@@ -1,0 +1,16 @@
+{
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "editor.formatOnSave": true,
+  "editor.codeActionsOnSave": { "source.fixAll.eslint": "explicit" },
+  "files.associations": {
+    "*.rules": "firerules",
+    "firestore.rules": "firerules"
+  },
+  "javascript.preferences.importModuleSpecifierEnding": "minimal",
+  "emmet.includeLanguages": { "javascript": "javascriptreact" },
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/.expo": true,
+    "**/.firebase": true
+  }
+}

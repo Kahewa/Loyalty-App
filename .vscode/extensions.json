@@ -1,0 +1,14 @@
+{
+  "recommendations": [
+    "dsznajder.es7-react-js-snippets",
+    "expo.vscode-expo-tools",
+    "msjsdiag.vscode-react-native",
+    "toba.vsfire",
+    "dbaeumer.vscode-eslint",
+    "esbenp.prettier-vscode",
+    "christian-kohler.path-intellisense",
+    "formulahendry.auto-rename-tag",
+    "mikestead.dotenv",
+    "usernamehw.errorlens"
+  ]
+}

@@ -1,0 +1,31 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // The whole multi-tenancy model in one block: an owner's auth uid IS their
+    // business id, so "is this your data?" is just uid == uid.
+    match /users/{uid}/{document=**} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // Collection-group queries are matched separately from the nested rule above.
+    // Home's cross-customer activity feed queries every `entries` subcollection at
+    // once, filtered by the denormalised ownerUid, so it needs its own rule.
+    match /{path=**}/entries/{entryId} {
+      allow read: if request.auth != null && resource.data.ownerUid == request.auth.uid;
+    }
+
+    // The Trigger Email queue. The Admin SDK inside Cloud Functions bypasses
+    // rules entirely, so slamming this shut costs nothing and stops any client
+    // from sending mail as you.
+    match /mail/{doc} {
+      allow read, write: if false;
+    }
+
+    // Anything not named above is denied.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,0 +1,4 @@
+node_modules
+.expo
+.firebase
+functions/node_modules
