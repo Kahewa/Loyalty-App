@@ -14,12 +14,17 @@ const { onRequest } = require('firebase-functions/v2/https');
 const { onDocumentCreated } = require('firebase-functions/v2/firestore');
 const { setGlobalOptions } = require('firebase-functions/v2');
 const logger = require('firebase-functions/logger');
-const admin = require('firebase-admin');
+const { initializeApp } = require('firebase-admin/app');
+const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 
 const { DEFAULT_TEMPLATES, render, toHtml } = require('./templates');
 
-admin.initializeApp();
-const db = admin.firestore();
+// Modular imports rather than the `admin.firestore.FieldValue` namespace: that
+// namespace still exists in production but the Functions emulator swaps in its
+// own firebase-admin shim, which does not carry the static across. Same code,
+// works in both.
+initializeApp();
+const db = getFirestore();
 
 setGlobalOptions({ region: 'us-central1', maxInstances: 10 });
 
@@ -35,7 +40,7 @@ function queueEmail({ to, subject, body, businessName }) {
       text: body,
       html: toHtml(body, businessName),
     },
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    createdAt: FieldValue.serverTimestamp(),
   });
 }
 
@@ -98,7 +103,7 @@ exports.submitSignup = onRequest(async (req, res) => {
       name: cleanName,
       email: cleanEmail,
       pointsBalance: 0,
-      joinedAt: admin.firestore.FieldValue.serverTimestamp(),
+      joinedAt: FieldValue.serverTimestamp(),
       source: 'signup',
     });
 

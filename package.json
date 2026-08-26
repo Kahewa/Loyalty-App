@@ -8,11 +8,12 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "emulators": "firebase emulators:start",
+    "emulators": "cross-env FUNCTIONS_DISCOVERY_TIMEOUT=120 firebase emulators:start",
     "deploy:rules": "firebase deploy --only firestore:rules",
     "deploy:functions": "firebase deploy --only functions",
     "deploy:hosting": "firebase deploy --only hosting",
-    "deploy": "firebase deploy"
+    "deploy": "firebase deploy",
+    "emulators:clean": "cross-env FUNCTIONS_DISCOVERY_TIMEOUT=120 firebase emulators:start --project demo-loyalty"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.2.0",
@@ -35,5 +36,8 @@
   },
   "overrides": {
     "react-dom": "19.2.3"
+  },
+  "devDependencies": {
+    "cross-env": "^10.1.0"
   }
 }

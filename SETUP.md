@@ -166,20 +166,23 @@ Then, in the app: create your account, set up a reward, and open **Share QR**.
 The Emulator Suite is a fake Firebase running on your PC — no billing, no live
 data, and you can wipe it and start over.
 
-**It needs Java.** If `java -version` fails, install a JDK first:
-
-```powershell
-winget install Microsoft.OpenJDK.21
-```
-
-Then close and reopen your terminal.
+**It needs Java** — already installed on this machine (Microsoft OpenJDK 21). On a
+new machine: `winget install Microsoft.OpenJDK.21`, then reopen your terminal.
 
 Run two terminals in VS Code:
 
 ```bash
-firebase emulators:start     # terminal 1 — fake Firebase, UI at http://localhost:4000
-npx expo start               # terminal 2 — the app
+npm run emulators     # terminal 1 — fake Firebase, UI at http://localhost:4000
+npx expo start        # terminal 2 — the app
 ```
+
+Use `npm run emulators`, not `firebase emulators:start` directly. The emulator
+gives your functions 10 seconds to load, and a cold `require` of `firebase-admin`
+on Windows takes longer than that — you get
+*"Cannot determine backend specification. Timeout after 10000"* and none of your
+functions register. The npm script sets `FUNCTIONS_DISCOVERY_TIMEOUT=120` to fix
+it. `npm run emulators:clean` does the same against a throwaway `demo-loyalty`
+project, which needs no Firebase login at all.
 
 Point the app at them by setting `EXPO_PUBLIC_USE_EMULATORS=1` in `.env` and
 restarting Expo with `npx expo start -c` (the `-c` clears the cache — env values
