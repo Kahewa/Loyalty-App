@@ -9,7 +9,6 @@ free Spark plan.
 | Console | <https://console.firebase.google.com/project/loyalty-bg> |
 | Firestore region | `africa-south1` (Johannesburg) — permanent |
 | Signup page | <https://loyalty-bg.web.app> |
-| Account | bygreys.na@gmail.com |
 
 Already done: project created, Firestore database in Johannesburg, security
 rules and indexes deployed, web app registered, `.env` written, hosting live.

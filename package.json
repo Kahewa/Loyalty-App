@@ -14,7 +14,9 @@
     "deploy:hosting": "firebase deploy --only hosting",
     "deploy": "firebase deploy --only firestore,hosting",
     "emulators:clean": "cross-env FUNCTIONS_DISCOVERY_TIMEOUT=120 firebase emulators:start --project demo-loyalty",
-    "config": "node scripts/gen-public-config.js"
+    "config": "node scripts/gen-public-config.js",
+    "hooks": "git config core.hooksPath .githooks",
+    "check:secrets": "node scripts/check-secrets.js"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.2.0",
