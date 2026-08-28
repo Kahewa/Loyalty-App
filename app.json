@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Loyalty",
-    "slug": "loyalty-app",
+    "name": "Loyalty Link",
+    "slug": "loyalty-link",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -9,12 +9,21 @@
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.loyaltyapp.owner"
+      "bundleIdentifier": "com.loyaltyapp.owner",
+      "infoPlist": {
+        "LSApplicationQueriesSchemes": [
+          "mailto",
+          "googlegmail",
+          "ms-outlook",
+          "ymail",
+          "readdle-spark"
+        ]
+      }
     },
     "android": {
       "package": "com.loyaltyapp.owner",
       "adaptiveIcon": {
-        "backgroundColor": "#0F172A",
+        "backgroundColor": "#F7F3EA",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -33,7 +42,8 @@
           "resizeMode": "contain",
           "backgroundColor": "#0F172A"
         }
-      ]
+      ],
+      "expo-mail-composer"
     ]
   }
 }

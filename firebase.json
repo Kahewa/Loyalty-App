@@ -14,18 +14,13 @@
   "hosting": {
     "public": "public",
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
-    "rewrites": [
-      {
-        "source": "/api/signup",
-        "function": { "functionId": "submitSignup", "region": "us-central1" }
-      },
-      {
-        "source": "/api/business",
-        "function": { "functionId": "getBusinessPublic", "region": "us-central1" }
-      },
-      { "source": "/join/**", "destination": "/join.html" }
-    ],
+    "predeploy": ["node scripts/gen-public-config.js"],
+    "rewrites": [{ "source": "/join/**", "destination": "/join.html" }],
     "headers": [
+      {
+        "source": "/firebase-config.js",
+        "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+      },
       {
         "source": "**/*.@(js|css)",
         "headers": [{ "key": "Cache-Control", "value": "max-age=3600" }]

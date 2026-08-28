@@ -1,11 +1,15 @@
 import { useEffect, useState } from 'react';
-import { View, Text, Alert, Switch, Pressable, StyleSheet } from 'react-native';
+import { View, Text, Switch, Pressable } from 'react-native';
+import { showAlert } from '../../src/components/alert';
 import { useAuth } from '../../src/auth-context';
 import { watchRewards, saveReward, deleteReward } from '../../src/data';
 import { Screen, Card, Field, Button, Dim, Empty, Badge } from '../../src/components/ui';
-import { colors, radius, spacing } from '../../src/theme';
+import { font, radius, shadow, spacing } from '../../src/theme';
+import { useTheme, useThemedStyles } from '../../src/theme-context';
 
 export default function Rewards() {
+  const s = useThemedStyles(makeStyles);
+  const { colors } = useTheme();
   const { user } = useAuth();
   const [rewards, setRewards] = useState(null);
   const [editing, setEditing] = useState(null); // null = closed, {} = new
@@ -33,13 +37,7 @@ export default function Rewards() {
 
     setBusy(true);
     try {
-      // Only one reward drives the counter, so switching one on switches the rest off.
-      if (active) {
-        const others = (rewards || []).filter((r) => r.active && r.id !== editing.id);
-        await Promise.all(
-          others.map((r) => saveReward(user.uid, { ...r, active: false }))
-        );
-      }
+      // Rewards run alongside each other — turning one on leaves the rest alone.
       await saveReward(user.uid, { id: editing.id, name, pointsRequired: n, active });
       setEditing(null);
     } catch (e) {
@@ -50,12 +48,12 @@ export default function Rewards() {
   }
 
   function confirmDelete(reward) {
-    Alert.alert(`Delete "${reward.name}"?`, 'Past redemptions keep their record.', [
+    showAlert(`Delete "${reward.name}"?`, 'Past redemptions keep their record.', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',
         style: 'destructive',
-        onPress: () => deleteReward(user.uid, reward.id).catch((e) => Alert.alert('Error', e.message)),
+        onPress: () => deleteReward(user.uid, reward.id).catch((e) => showAlert('Error', e.message)),
       },
     ]);
   }
@@ -77,12 +75,12 @@ export default function Rewards() {
             value={points}
             onChangeText={(t) => setPoints(t.replace(/[^0-9]/g, ''))}
             keyboardType="number-pad"
-            hint="One visit = one point, so 10 means every 10th visit is free."
+            hint="One visit = one point. Set several rewards at different totals and customers unlock each as they reach it."
           />
           <View style={s.switchRow}>
             <View style={{ flex: 1 }}>
               <Text style={s.switchLabel}>Active</Text>
-              <Dim>The active reward is the one the counter aims at and emails announce.</Dim>
+              <Dim>Active rewards are the ones customers can work toward. Several can run at once.</Dim>
             </View>
             <Switch
               value={active}
@@ -133,14 +131,15 @@ export default function Rewards() {
       )}
 
       <Dim>
-        Only one reward can be active at a time. Turning a new one on turns the others off, so a
-        customer's balance always has exactly one target.
+        Rewards run side by side. A customer on 12 visits has earned everything set at 12 or fewer
+        — the app shows each one waiting for them, and the stamps count toward whichever comes
+        next.
       </Dim>
     </Screen>
   );
 }
 
-const s = StyleSheet.create({
+const makeStyles = ({ colors }) => ({
   rewardRow: { flexDirection: 'row', alignItems: 'center', gap: spacing(1.5) },
   rewardName: { color: colors.text, fontSize: 17, fontWeight: '700' },
   rewardMeta: { color: colors.textDim, fontSize: 13 },

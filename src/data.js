@@ -18,7 +18,6 @@ import {
   runTransaction,
   increment,
   serverTimestamp,
-  collectionGroup,
 } from 'firebase/firestore';
 import { db } from './firebase';
 
@@ -31,7 +30,76 @@ const redemptionsCol = (uid) => collection(db, 'users', uid, 'redemptions');
 
 /* ---------------------------------------------------------------- business */
 
-export const updateBusiness = (uid, patch) => updateDoc(businessDoc(uid), patch);
+const publicProfileDoc = (uid) => doc(db, 'users', uid, 'public', 'profile');
+const signupRequestsCol = (uid) => collection(db, 'users', uid, 'signupRequests');
+
+/**
+ * The join page is a plain web page with no server behind it, so it reads the
+ * business name straight out of Firestore. Only these two fields are world-
+ * readable — the templates and the owner's email stay on the private doc.
+ */
+export const updatePublicProfile = (uid, fields) =>
+  setDoc(publicProfileDoc(uid), fields, { merge: true });
+
+// Fields the join page is allowed to see. The templates and the owner's own
+// email address are deliberately not among them.
+const PUBLIC_FIELDS = ['businessName', 'logoUrl', 'theme'];
+
+export async function updateBusiness(uid, patch) {
+  await updateDoc(businessDoc(uid), patch);
+
+  // Mirror only the public-facing fields, so the signup page shows the right
+  // name and wears the shop's colours.
+  const publicPatch = Object.fromEntries(
+    Object.entries(patch).filter(([k, v]) => PUBLIC_FIELDS.includes(k) && v !== undefined)
+  );
+  if (Object.keys(publicPatch).length) {
+    await updatePublicProfile(uid, publicPatch);
+  }
+}
+
+/* ---------------------------------------------------------- signup requests */
+
+export function watchSignupRequests(uid, cb) {
+  return onSnapshot(
+    query(signupRequestsCol(uid), orderBy('createdAt', 'desc')),
+    (snap) => cb(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
+    (err) => {
+      console.warn('[signup requests]', err.message);
+      cb([]);
+    }
+  );
+}
+
+/**
+ * Turn a pending request into a real customer. Done in one batch so a request
+ * can never be consumed twice or vanish without a customer appearing.
+ */
+export async function acceptSignupRequest(uid, request) {
+  const existing = request.email ? await findCustomerByEmail(uid, request.email) : null;
+  if (existing) {
+    // Already a customer — drop the request rather than creating a duplicate.
+    await deleteDoc(doc(signupRequestsCol(uid), request.id));
+    return { customerId: existing.id, alreadyExisted: true };
+  }
+
+  const batch = writeBatch(db);
+  const customerRef = doc(customersCol(uid));
+  batch.set(customerRef, {
+    name: request.name,
+    email: request.email,
+    pointsBalance: 0,
+    joinedAt: serverTimestamp(),
+    source: 'signup',
+  });
+  batch.delete(doc(signupRequestsCol(uid), request.id));
+  await batch.commit();
+
+  return { customerId: customerRef.id, alreadyExisted: false };
+}
+
+export const rejectSignupRequest = (uid, requestId) =>
+  deleteDoc(doc(signupRequestsCol(uid), requestId));
 
 /* --------------------------------------------------------------- customers */
 
@@ -54,23 +122,11 @@ export function watchEntries(uid, customerId, cb, max = 50) {
   );
 }
 
-// Recent activity across every customer — needs the collectionGroup index.
-export function watchRecentActivity(uid, cb, max = 25) {
-  return onSnapshot(
-    query(
-      collectionGroup(db, 'entries'),
-      where('ownerUid', '==', uid),
-      orderBy('createdAt', 'desc'),
-      limit(max)
-    ),
-    (snap) => cb(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
-    (err) => {
-      // Missing index or offline — degrade quietly rather than blank the Home screen.
-      console.warn('[recent activity]', err.message);
-      cb([]);
-    }
-  );
-}
+// The dashboard used to show a per-visit activity feed here, via a
+// collectionGroup query over every `entries` subcollection. It now shows a
+// per-customer tally instead, so that query is gone. Its Firestore index and
+// its security rule are deliberately left in place — they cost nothing and are
+// what a future activity feed would need.
 
 export async function findCustomerByEmail(uid, email) {
   const snap = await getDocs(
@@ -109,6 +165,66 @@ export async function deleteCustomer(uid, customerId) {
 }
 
 /* ------------------------------------------------------------ logging visits */
+
+/** Active rewards, cheapest first. The order everything else assumes. */
+export function activeRewards(rewards) {
+  return (rewards || [])
+    .filter((r) => r.active && Number(r.pointsRequired) > 0)
+    .sort((a, b) => Number(a.pointsRequired) - Number(b.pointsRequired));
+}
+
+/**
+ * Which rewards a visit just put within reach.
+ *
+ * Comparing before against after — rather than "balance >= threshold" — is what
+ * makes a reward announce itself on the visit that earns it and stay quiet on
+ * every visit after. With several rewards running at once, one visit can cross
+ * more than one line, so this returns a list.
+ */
+export function rewardsCrossed(before, after, rewards) {
+  return activeRewards(rewards).filter((r) => {
+    const t = Number(r.pointsRequired);
+    return before < t && after >= t;
+  });
+}
+
+/**
+ * One customer's standing across every active reward. Home, the customer list
+ * and the customer card all read this, so it is worked out once here rather
+ * than three times slightly differently.
+ *
+ * `earned` is everything they can claim right now — rewards are independent
+ * tiers, not a single ladder, so a regular on 12 visits may have several
+ * waiting. `next` is the cheapest one still out of reach, which is what the
+ * stamps count toward.
+ */
+export function rewardStatus(customer, rewards) {
+  const balance = customer?.pointsBalance || 0;
+  const active = activeRewards(rewards);
+
+  const earned = active.filter((r) => balance >= Number(r.pointsRequired));
+  const next = active.find((r) => balance < Number(r.pointsRequired)) || null;
+
+  if (!active.length) {
+    return { balance, active, earned: [], next: null, target: 0, toGo: 0, ratio: 0, ready: false };
+  }
+
+  // With nothing left to aim at, the stamps show the top tier, full.
+  const target = Number((next || active[active.length - 1]).pointsRequired);
+  const toGo = next ? Math.max(0, Number(next.pointsRequired) - balance) : 0;
+
+  return {
+    balance,
+    active,
+    earned,
+    next,
+    target,
+    toGo,
+    // Someone on 12 of 10 has an unclaimed reward, so clamp the bar but not the count.
+    ratio: Math.min(1, balance / target),
+    ready: earned.length > 0,
+  };
+}
 
 /**
  * One atomic batched write: bump the running total AND write the audit line.
@@ -165,11 +281,12 @@ export async function saveReward(uid, { id, name, pointsRequired, active }) {
 
 export const deleteReward = (uid, rewardId) => deleteDoc(doc(rewardsCol(uid), rewardId));
 
-export async function getActiveReward(uid) {
+/** Every reward currently running, cheapest first. */
+export async function getActiveRewards(uid) {
   const snap = await getDocs(
-    query(rewardsCol(uid), where('active', '==', true), orderBy('pointsRequired'), limit(1))
+    query(rewardsCol(uid), where('active', '==', true), orderBy('pointsRequired'))
   );
-  return snap.empty ? null : { id: snap.docs[0].id, ...snap.docs[0].data() };
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 }
 
 /* -------------------------------------------------------------- redemptions */

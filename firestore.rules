@@ -3,28 +3,64 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    function signedInAs(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
     // The whole multi-tenancy model in one block: an owner's auth uid IS their
     // business id, so "is this your data?" is just uid == uid.
     match /users/{uid}/{document=**} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
+      allow read, write: if signedInAs(uid);
     }
 
-    // Collection-group queries are matched separately from the nested rule above.
-    // Home's cross-customer activity feed queries every `entries` subcollection at
-    // once, filtered by the denormalised ownerUid, so it needs its own rule.
+    // Collection-group queries are matched separately from the nested rule
+    // above. Home's cross-customer activity feed queries every `entries`
+    // subcollection at once, filtered by the denormalised ownerUid, so it needs
+    // its own rule. Miss this and you get a permission error that reads as
+    // though the main rule is broken.
     match /{path=**}/entries/{entryId} {
       allow read: if request.auth != null && resource.data.ownerUid == request.auth.uid;
     }
 
-    // The Trigger Email queue. The Admin SDK inside Cloud Functions bypasses
-    // rules entirely, so slamming this shut costs nothing and stops any client
-    // from sending mail as you.
-    match /mail/{doc} {
-      allow read, write: if false;
+    // ---------------------------------------------------------------- public
+    // The join page has no server behind it on the Spark plan, so it reads the
+    // business name straight from Firestore. That is why the public-facing
+    // fields live in their own document rather than on users/{uid} — a public
+    // read here must not expose the owner's email or their message templates.
+    match /users/{uid}/public/{doc} {
+      allow read: if true;
+      allow write: if signedInAs(uid);
     }
 
-    // Anything not named above is denied.
-    match /{document=**} {
+    // A customer signing themselves up. This is the one unauthenticated write
+    // in the system, so it is fenced in hard:
+    //   - create only. No read, no update, no delete, so nobody can enumerate
+    //     or edit what has been submitted.
+    //   - exact field set, so no extra data can be smuggled in.
+    //   - status pinned to 'pending', so nobody can self-approve.
+    //   - length caps, so a request cannot be used as free storage.
+    // Nothing here becomes a customer until the owner taps Accept in the app.
+    match /users/{uid}/signupRequests/{reqId} {
+      allow create: if isWellFormedSignup();
+      allow read, update, delete: if signedInAs(uid);
+    }
+
+    function isWellFormedSignup() {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['name', 'email', 'status', 'createdAt'])
+          && d.keys().hasAll(['name', 'email', 'status', 'createdAt'])
+          && d.createdAt is timestamp
+          && d.name is string && d.name.size() > 0 && d.name.size() <= 80
+          && d.email is string && d.email.size() > 3 && d.email.size() <= 254
+          && d.email.matches('^[^@\\s]+@[^@\\s]+[.][^@\\s]+$')
+          && d.email == d.email.lower()
+          && d.status == 'pending';
+    }
+
+    // The Trigger Email queue. Unused on the Spark plan (extensions deploy
+    // functions, which Spark will not do), but kept shut so that turning
+    // Blaze on later does not quietly open a hole.
+    match /mail/{doc} {
       allow read, write: if false;
     }
   }

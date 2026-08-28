@@ -1,13 +1,16 @@
 import { useState } from 'react';
-import { View, Text, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, KeyboardAvoidingView, Platform } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useAuth } from '../../src/auth-context';
 import { addCustomer } from '../../src/data';
 import { isValidEmail } from '../../src/format';
 import { Screen, Card, Field, Button, Dim } from '../../src/components/ui';
-import { colors, spacing } from '../../src/theme';
+import { font, radius, shadow, spacing } from '../../src/theme';
+import { useTheme, useThemedStyles } from '../../src/theme-context';
 
 export default function AddCustomer() {
+  const s = useThemedStyles(makeStyles);
+  const { colors } = useTheme();
   const params = useLocalSearchParams();
   const { user } = useAuth();
   const router = useRouter();
@@ -75,6 +78,6 @@ export default function AddCustomer() {
   );
 }
 
-const s = StyleSheet.create({
+const makeStyles = ({ colors }) => ({
   error: { color: colors.danger, fontSize: 14 },
 });

@@ -64,6 +64,13 @@ export function AuthProvider({ children }) {
           createdAt: serverTimestamp(),
         });
       }
+      // The world-readable half, so the join page can greet people by shop name
+      // without being able to see the owner's email or message templates.
+      await setDoc(
+        doc(db, 'users', cred.user.uid, 'public', 'profile'),
+        { businessName: businessName.trim(), logoUrl: '' },
+        { merge: true }
+      );
       return cred.user;
     },
   };

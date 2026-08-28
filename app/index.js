@@ -1,15 +1,19 @@
 import { Redirect } from 'expo-router';
-import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, ActivityIndicator } from 'react-native';
 import { useAuth } from '../src/auth-context';
 import { isConfigured } from '../src/firebase';
-import { colors, spacing } from '../src/theme';
+import { useTheme, useThemedStyles } from '../src/theme-context';
+import { font, spacing } from '../src/theme';
 
 export default function Index() {
   const { user, initialising } = useAuth();
+  const { colors } = useTheme();
+  const s = useThemedStyles(makeStyles);
 
   if (!isConfigured) {
     return (
       <View style={s.wrap}>
+        <Text style={s.glyph}>🌿</Text>
         <Text style={s.title}>Firebase isn't configured yet</Text>
         <Text style={s.body}>
           Copy <Text style={s.code}>.env.example</Text> to <Text style={s.code}>.env</Text>, paste
@@ -32,16 +36,17 @@ export default function Index() {
   return <Redirect href={user ? '/home' : '/login'} />;
 }
 
-const s = StyleSheet.create({
+const makeStyles = ({ colors }) => ({
   wrap: {
     flex: 1,
     backgroundColor: colors.bg,
     alignItems: 'center',
     justifyContent: 'center',
     padding: spacing(3),
-    gap: spacing(2),
+    gap: spacing(1.5),
   },
-  title: { color: colors.text, fontSize: 20, fontWeight: '800', textAlign: 'center' },
-  body: { color: colors.textDim, fontSize: 15, lineHeight: 22, textAlign: 'center' },
-  code: { color: colors.accent, fontFamily: 'monospace' },
+  glyph: { fontSize: 40 },
+  title: { ...font.title, color: colors.text, textAlign: 'center' },
+  body: { ...font.body, color: colors.textDim, lineHeight: 22, textAlign: 'center' },
+  code: { color: colors.accent, fontFamily: 'monospace', fontWeight: '700' },
 });

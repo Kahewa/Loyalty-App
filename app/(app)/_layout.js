@@ -1,10 +1,11 @@
 import { Stack, Redirect } from 'expo-router';
 import { View, ActivityIndicator } from 'react-native';
 import { useAuth } from '../../src/auth-context';
-import { colors } from '../../src/theme';
+import { useTheme } from '../../src/theme-context';
 
 export default function AppLayout() {
   const { user, initialising } = useAuth();
+  const { colors } = useTheme();
 
   if (initialising) {
     return (
@@ -14,7 +15,7 @@ export default function AppLayout() {
     );
   }
 
-  // The guard: no session, no business data. Rules enforce this server-side too.
+  // The guard: no session, no screens. Rules enforce this server-side too.
   if (!user) return <Redirect href="/login" />;
 
   return (
@@ -29,10 +30,13 @@ export default function AppLayout() {
       }}
     >
       <Stack.Screen name="home" options={{ headerShown: false }} />
+      <Stack.Screen name="customers" options={{ title: 'All customers' }} />
       <Stack.Screen name="customer/[id]" options={{ title: '' }} />
       <Stack.Screen name="add-customer" options={{ title: 'Add customer', presentation: 'modal' }} />
+      <Stack.Screen name="pending" options={{ title: 'Signup requests' }} />
       <Stack.Screen name="rewards" options={{ title: 'Rewards' }} />
       <Stack.Screen name="templates" options={{ title: 'Email templates' }} />
+      <Stack.Screen name="appearance" options={{ title: 'Appearance' }} />
       <Stack.Screen name="share" options={{ title: 'Your signup QR' }} />
       <Stack.Screen name="settings" options={{ title: 'Settings' }} />
     </Stack>

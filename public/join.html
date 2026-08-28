@@ -6,16 +6,18 @@
     <meta name="robots" content="noindex" />
     <title>Join the loyalty card</title>
     <style>
+      /* Loyalty Link brand colours — the app's default. applyTheme() overwrites these with
+         whatever the shop picked under Appearance. */
       :root {
-        --bg: #0f172a;
-        --surface: #1e293b;
-        --border: #334155;
-        --text: #f8fafc;
-        --dim: #94a3b8;
-        --accent: #38bdf8;
-        --accent-text: #04283a;
-        --danger: #f87171;
-        --success: #34d399;
+        --bg: #f7f3ea;
+        --surface: #ffffff;
+        --border: #e0dbd0;
+        --text: #2c3a52;
+        --dim: #6b7585;
+        --accent: #8caa80;
+        --accent-text: #ffffff;
+        --danger: #b4544a;
+        --success: #4b7a55;
       }
       * { box-sizing: border-box; }
       body {
@@ -36,7 +38,7 @@
         border-radius: 20px;
         padding: 32px 24px;
       }
-      .mark { color: var(--accent); font-size: 34px; text-align: center; }
+      .mark { font-size: 34px; text-align: center; }
       h1 { font-size: 24px; margin: 8px 0 4px; text-align: center; }
       .sub { color: var(--dim); font-size: 15px; text-align: center; margin: 0 0 24px; line-height: 1.5; }
       label { display: block; font-size: 12px; font-weight: 600; letter-spacing: .3px; color: var(--dim); margin-bottom: 6px; }
@@ -68,14 +70,14 @@
       .fine { color: var(--dim); font-size: 12px; text-align: center; margin: 20px 0 0; line-height: 1.6; }
       .done { text-align: center; }
       .done .tick { font-size: 48px; color: var(--success); }
-      /* Honeypot: kept out of the layout and out of the tab order, but still a
-         real, fillable field as far as an automated form-filler is concerned. */
+      /* Honeypot: out of the layout and out of the tab order, but still a real
+         fillable field as far as an automated form-filler is concerned. */
       .hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
     </style>
   </head>
   <body>
     <main class="card" id="card">
-      <div class="mark">&#9670;</div>
+      <div class="mark">&#127807;</div>
       <h1 id="title">Loading&hellip;</h1>
       <p class="sub" id="sub">Fetching the details of this loyalty card.</p>
 
@@ -100,9 +102,18 @@
       </form>
     </main>
 
+    <script src="/firebase-config.js"></script>
     <script>
-      // The join link is /join/{uid} — the owner's Firebase uid doubles as the
-      // business id, so the URL carries everything this page needs.
+      // This page has no server behind it — Cloud Functions need the paid plan.
+      // It talks to the Firestore REST API using the project's public API key,
+      // which authorises nothing on its own. firestore.rules is what allows a
+      // read of users/{uid}/public/profile and a create of one signup request,
+      // and nothing else: this page cannot read the customer list, cannot see
+      // what anyone else submitted, and cannot add a customer directly.
+      const CFG = window.FIREBASE_CONFIG || {};
+      const DOCS = `https://firestore.googleapis.com/v1/projects/${CFG.projectId}/databases/(default)/documents`;
+
+      // The join link is /join/{uid} — the owner's uid doubles as the business id.
       const uid = decodeURIComponent(location.pathname.split('/').filter(Boolean).pop() || '');
 
       const el = (id) => document.getElementById(id);
@@ -111,6 +122,8 @@
       const form = el('form');
       const errorBox = el('error');
       const submit = el('submit');
+
+      let businessName = '';
 
       function fail(heading, detail) {
         title.textContent = heading;
@@ -123,22 +136,63 @@
         errorBox.hidden = false;
       }
 
+      // The shop picks its colours in the app; this page wears them too, so the
+      // QR code does not lead somewhere that looks like a different business.
+      function applyTheme(theme) {
+        if (!theme) return;
+        const accent = theme.accent?.stringValue;
+        const paper = theme.paper?.stringValue;
+        const ink = theme.ink?.stringValue;
+        const ok = (v) => /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(v || '');
+        const root = document.documentElement.style;
+        if (ok(paper)) { root.setProperty('--bg', paper); root.setProperty('--surface', '#ffffff'); }
+        if (ok(ink)) { root.setProperty('--text', ink); root.setProperty('--dim', mix(ink, paper || '#ffffff', 0.45)); }
+        if (ok(accent)) {
+          root.setProperty('--accent', accent);
+          root.setProperty('--accent-text', luminance(accent) > 0.45 ? '#22251f' : '#ffffff');
+          root.setProperty('--border', mix(paper || '#ffffff', ink || '#333333', 0.16));
+        }
+      }
+
+      function mix(a, b, amount) {
+        const p = (h) => { const n = parseInt(h.replace('#',''), 16); return [(n>>16)&255,(n>>8)&255,n&255]; };
+        const [r1,g1,b1] = p(a), [r2,g2,b2] = p(b);
+        const c = (x,y) => Math.round(x + (y-x)*amount).toString(16).padStart(2,'0');
+        return '#' + c(r1,r2) + c(g1,g2) + c(b1,b2);
+      }
+
+      function luminance(hex) {
+        const n = parseInt(hex.replace('#',''), 16);
+        const ch = (v) => { const s = v/255; return s <= 0.03928 ? s/12.92 : Math.pow((s+0.055)/1.055, 2.4); };
+        return 0.2126*ch((n>>16)&255) + 0.7152*ch((n>>8)&255) + 0.0722*ch(n&255);
+      }
+
       async function load() {
         if (!uid || uid === 'join') {
           return fail('Link incomplete', 'Scan the QR code again, or ask the shop for a fresh link.');
         }
+        if (!CFG.projectId || !CFG.apiKey) {
+          return fail('Not configured', 'This signup page is missing its Firebase settings.');
+        }
         try {
-          const res = await fetch('/api/business?uid=' + encodeURIComponent(uid));
+          const res = await fetch(
+            `${DOCS}/users/${encodeURIComponent(uid)}/public/profile?key=${CFG.apiKey}`
+          );
           if (!res.ok) throw new Error('not found');
-          const data = await res.json();
-          const name = data.businessName || 'our loyalty card';
-          title.textContent = 'Join ' + name;
-          sub.textContent = 'Collect a point every visit. We will email you the moment a reward is yours.';
-          document.title = 'Join ' + name;
+          const doc = await res.json();
+          businessName = doc.fields?.businessName?.stringValue || 'our loyalty card';
+          applyTheme(doc.fields?.theme?.mapValue?.fields);
+          title.textContent = 'Join ' + businessName;
+          sub.textContent =
+            'Collect a point every visit. We will let you know the moment a reward is yours.';
+          document.title = 'Join ' + businessName;
           form.hidden = false;
           el('name').focus();
         } catch {
-          fail('This card could not be found', 'The link may be out of date. Ask the shop for a fresh QR code.');
+          fail(
+            'This card could not be found',
+            'The link may be out of date. Ask the shop for a fresh QR code.'
+          );
         }
       }
 
@@ -146,8 +200,13 @@
         event.preventDefault();
         errorBox.hidden = true;
 
-        const name = el('name').value.trim();
-        const email = el('email').value.trim();
+        const name = el('name').value.trim().slice(0, 80);
+        const email = el('email').value.trim().toLowerCase();
+
+        // Honeypot. Show the bot a success screen so it does not retry, and
+        // write nothing.
+        if (el('website').value) return done(false);
+
         if (!name) return showError('Please enter your name.');
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
           return showError('That email address does not look right.');
@@ -157,34 +216,46 @@
         submit.textContent = 'Joining…';
 
         try {
-          const res = await fetch('/api/signup', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ uid, name, email, website: el('website').value }),
-          });
-          const data = await res.json().catch(() => ({}));
+          const res = await fetch(
+            `${DOCS}/users/${encodeURIComponent(uid)}/signupRequests?key=${CFG.apiKey}`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                fields: {
+                  name: { stringValue: name },
+                  email: { stringValue: email },
+                  status: { stringValue: 'pending' },
+                  createdAt: { timestampValue: new Date().toISOString() },
+                },
+              }),
+            }
+          );
 
-          if (!res.ok || !data.ok) {
-            showError(data.error || 'Something went wrong. Please try again.');
+          if (!res.ok) {
+            // A rules rejection lands here. Do not show the raw Firestore error.
+            showError('Something went wrong. Please try again, or ask at the counter.');
             submit.disabled = false;
             submit.textContent = 'Join the card';
             return;
           }
-
-          el('card').innerHTML =
-            '<div class="done"><div class="tick">&#10003;</div>' +
-            '<h1>' + (data.alreadyMember ? "You're already on the list" : "You're in") + '</h1>' +
-            '<p class="sub">' +
-            (data.alreadyMember
-              ? 'That email is already collecting points. Just give your name at the counter.'
-              : 'Check your inbox for a welcome email. Give your name at the counter and we will add your points.') +
-            '</p></div>';
+          done(true);
         } catch {
           showError('No connection. Check your signal and try again.');
           submit.disabled = false;
           submit.textContent = 'Join the card';
         }
       });
+
+      function done() {
+        el('card').innerHTML =
+          '<div class="done"><div class="tick">&#10003;</div>' +
+          "<h1>You're on the list</h1>" +
+          '<p class="sub">' +
+          (businessName ? businessName + ' will' : 'The shop will') +
+          ' add you to their card shortly. Just give your name at the counter and they will start ' +
+          'adding your points.</p></div>';
+      }
 
       load();
     </script>

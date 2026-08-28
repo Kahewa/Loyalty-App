@@ -1,213 +1,184 @@
 # Setup
 
-Everything is written and installed. What is left is the part only you can do:
-creating the Firebase project and pasting six keys into a file.
+Your Firebase project is **already created and configured**: `loyalty-bg`, on the
+free Spark plan.
 
-Work through this once, top to bottom. It takes about twenty minutes.
-
----
-
-## 1. Create the Firebase project
-
-1. Go to <https://console.firebase.google.com> and click **Add project**.
-2. Name it something like `loyalty-app`. Google Analytics is optional — skip it.
-3. Once it is created, note the **Project ID** (it looks like `loyalty-app-4f2c1`).
-   This is not the display name; it is the id shown under the name.
-
-Put that id into [.firebaserc](.firebaserc), replacing `REPLACE_WITH_YOUR_PROJECT_ID`.
-
----
-
-## 2. Turn on the three services
-
-In the Firebase console sidebar:
-
-- **Build → Authentication → Get started → Email/Password → Enable → Save.**
-  Leave "Email link (passwordless)" off.
-- **Build → Firestore Database → Create database.** Pick a region near you
-  (`europe-west2` for the UK, `us-central1` for the US). Choose **production mode** —
-  the rules in this repo replace whatever it starts with.
-- **Build → Hosting → Get started.** Click through the CLI steps; you already have
-  the CLI, so just finish the wizard.
-
----
-
-## 3. Upgrade to the Blaze plan
-
-Cloud Functions will not deploy on the free Spark plan.
-
-**⚙ → Usage and billing → Details & settings → Modify plan → Blaze.**
-
-A card is required. The free monthly allowance is 2 million function invocations
-and 50k Firestore reads per day; a shop logging a few hundred visits a month sits
-inside it, so expect a bill of roughly $0. Set a budget alert at £1 while you are
-in there — **Usage and billing → Details & settings → Budgets & alerts**.
-
----
-
-## 4. Register the web app and copy your keys
-
-1. **⚙ Project settings → General → Your apps → Web (`</>`).**
-2. Nickname it `loyalty-owner-app`. Do **not** tick "Firebase Hosting" here.
-3. Firebase shows a `firebaseConfig` object. Keep that tab open.
-
-Now, in the project folder:
-
-```bash
-cp .env.example .env
-```
-
-Open [.env](.env.example) and paste each value across:
-
-| Firebase shows | Goes into |
+| | |
 | --- | --- |
-| `apiKey` | `EXPO_PUBLIC_FIREBASE_API_KEY` |
-| `authDomain` | `EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN` |
-| `projectId` | `EXPO_PUBLIC_FIREBASE_PROJECT_ID` |
-| `storageBucket` | `EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET` |
-| `messagingSenderId` | `EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID` |
-| `appId` | `EXPO_PUBLIC_FIREBASE_APP_ID` |
+| Project ID | `loyalty-bg` |
+| Console | <https://console.firebase.google.com/project/loyalty-bg> |
+| Firestore region | `africa-south1` (Johannesburg) — permanent |
+| Signup page | <https://loyalty-bg.web.app> |
+| Account | bygreys.na@gmail.com |
 
-**These keys are public on purpose.** They identify your project; they authorise
-nothing. Anyone can read them out of the app bundle, and that is fine —
-[firestore.rules](firestore.rules) is what keeps one business out of another's
-data. Do not waste effort hiding them, and do not relax the rules because you
-think the keys are secret.
-
-`.env` is gitignored. `.env.example` is the template that stays in the repo.
+Already done: project created, Firestore database in Johannesburg, security
+rules and indexes deployed, web app registered, `.env` written, hosting live.
 
 ---
 
-## 5. Deploy the backend
+## The one thing left for you
 
-```bash
-firebase login
-firebase deploy
-```
+**Email/Password sign-in has to be switched on in the console.** There is no CLI
+command for it, so this is the single manual step.
 
-That pushes four things: the security rules, the two Firestore indexes, the three
-Cloud Functions, and the signup web page.
+1. Open <https://console.firebase.google.com/project/loyalty-bg/authentication>
+2. Click **Get started**
+3. Choose **Email/Password**, toggle **Enable** (leave "Email link" off), **Save**
 
-The **first deploy takes several minutes** and may ask permission to enable the
-Cloud Build and Artifact Registry APIs. Say yes.
-
-If it complains that an index is still building, wait a minute and re-run
-`firebase deploy --only firestore:indexes`.
-
----
-
-## 6. Wire up email (Brevo + Trigger Email)
-
-Firebase does not send email. The **Trigger Email** extension watches the `mail`
-collection and hands anything dropped in it to an SMTP provider. Brevo's free tier
-gives you 300 emails a day, which is plenty.
-
-**Get Brevo credentials:**
-
-1. Sign up at <https://www.brevo.com>.
-2. **SMTP & API → SMTP tab.** Note the login (an email address) and generate an
-   SMTP key — that is your password. Copy it now; it is shown once.
-3. **Senders, Domains & Dedicated IPs → Senders → Add a sender.** Use a real
-   address you control. Verify it via the email Brevo sends.
-
-**Install the extension:**
-
-1. Firebase console → **Extensions → Explore → "Trigger Email from Firestore" → Install**.
-2. Fill in:
-
-   | Field | Value |
-   | --- | --- |
-   | SMTP connection URI | `smtps://YOUR_BREVO_LOGIN@smtp-relay.brevo.com:465` |
-   | SMTP password | your Brevo SMTP key |
-   | Email documents collection | `mail` |
-   | Default FROM address | the sender address you verified |
-   | Default REPLY-TO address | your business email |
-
-   If your Brevo login contains an `@`, URL-encode it as `%40` inside the URI.
-
-3. Install. It takes a few minutes.
-
-**Test it:** Firestore → `mail` collection → add a document with
-`to: ["you@example.com"]` and `message: { subject: "test", text: "hello" }`.
-Within a minute the extension writes a `delivery` field onto that document saying
-`SUCCESS` or exactly what went wrong.
-
----
-
-## 7. Run the app
+That's it. Then:
 
 ```bash
 npx expo start
 ```
 
-Install **Expo Go** on your phone, scan the QR code in the terminal, and the app
-loads. Phone and PC must be on the same Wi-Fi. If the connection hangs, run
-`npx expo start --tunnel`.
-
-Then, in the app: create your account, set up a reward, and open **Share QR**.
+Scan the QR with **Expo Go** on your phone, create your business account, and
+you're running.
 
 ---
 
-## 8. First real run-through
+## What the free plan changes
 
-1. **Share QR** → open the link on your phone's browser. You should see your
-   business name on the signup page.
-2. Sign up with a real email address of your own. Check that a welcome email
-   arrives and that the person appears on your Home screen.
-3. Open them, tap **+1 visit** repeatedly up to your reward threshold. The email
-   should arrive the moment the counter crosses the line — and *only* on the
-   crossing visit, not on every visit after it.
-4. Tap **Redeem**. The balance drops and the redemption is listed in Settings.
+Cloud Functions need the paid Blaze plan, so on Spark there is **no server**.
+Two things work differently because of that:
+
+**Signups wait for you.** A customer scans your QR code and fills in the form.
+That form can do exactly one thing: create a *request*. It cannot read your
+customer list, cannot see other requests, and cannot add anyone. The request
+lands in **Signup requests** in your app, and you tap Accept. Home shows a
+banner when anyone is waiting.
+
+**You tap send on emails.** There are three templates, editable under **Email
+templates**:
+
+| Template | When it's offered |
+| --- | --- |
+| **Welcome** | Once, when you accept someone from Signup requests |
+| **Every visit** | Each time you log a visit — "you're on 7 of 10, 3 to go" |
+| **Reward earned** | On the visit that crosses the line, and only that visit |
+
+Each one fills in your wording and opens the mail app you chose, with the message
+ready. You press send. Placeholders available: `{{customer_name}}`,
+`{{business_name}}`, `{{points_balance}}`, `{{points_needed}}`,
+`{{points_to_go}}`, `{{reward_name}}`.
+
+**Pick your mail app** under **Settings → Send email with**: Apple Mail, Gmail,
+Outlook, Yahoo Mail or Spark. This matters on iPhone — left to itself, iOS only
+ever opens Apple Mail, so if you live in Gmail nothing useful happens. On Android
+the default raises the system chooser instead.
+
+If the mail app opening at every till tap gets in the way, **Settings → Email on
+every visit** turns off the progress note. The reward email is still offered
+either way.
+
+The alternative would be putting an email provider's API key inside the app,
+where anyone could extract it and send mail as you. Not worth it.
+
+Everything else — points, history, rewards, redemptions, the audit trail, offline
+logging — is unchanged.
+
+---
+
+## A note on the Expo SDK version
+
+This project is pinned to **Expo SDK 54** (React Native 0.81.5, React 19.1.0) on
+purpose, not by accident.
+
+Expo Go on iOS only speaks one SDK at a time, and which build the App Store gives
+you depends on your iOS version. On this iPhone that's the SDK 54 client, so the
+project has to match. Running `npx expo upgrade` or bumping to a newer SDK will
+make Expo Go refuse to open the app with a version-mismatch screen.
+
+If you later update iOS and the App Store offers a newer Expo Go, you can move the
+project up with `npx expo install expo@latest && npx expo install --fix`.
+
+## Day-to-day
+
+```bash
+npx expo start        # the app — scan the QR with Expo Go (SDK 54)
+npm run emulators     # a fake local Firebase (needs Java — already installed)
+npm run deploy        # rules, indexes and the signup page
+npm run config        # regenerate public/firebase-config.js after editing .env
+```
+
+**Ctrl+Shift+B** in VS Code starts the app and the emulators together.
+
+Use `npm run emulators`, not `firebase emulators:start` directly — the npm
+script sets `FUNCTIONS_DISCOVERY_TIMEOUT=120`. Without it, a cold
+`require('firebase-admin')` on Windows overruns the emulator's 10-second budget
+and your functions silently fail to register.
+
+`npm run deploy` deploys **firestore and hosting only**. Functions are excluded
+on purpose — on Spark they cannot deploy, and a plain `firebase deploy` would
+fail on them.
+
+Environment values are baked in when Metro builds. After editing `.env`, restart
+with `npx expo start -c` or the old values stick around.
+
+---
+
+## Testing the whole loop
+
+1. Enable Email/Password (above), then create your account in the app.
+2. **Rewards** → add two, e.g. *a free coffee* at 5 and *a free pastry* at 10,
+   both Active. Rewards run side by side rather than one at a time, so customers
+   unlock each as they reach it.
+3. **Share QR** → open <https://loyalty-bg.web.app/join/YOUR_UID> in a browser.
+   Your Settings screen shows the UID; the Share screen builds the link for you.
+   You should see your business name on the page.
+4. Fill it in with your own email. Your app should show **1 person wants to join**.
+5. Accept them. Offer to send the welcome email — it should open your mail app
+   with your template filled in.
+6. Open their card, tap **Add a visit**. Each tap offers the progress email
+   ("1 of 5, 4 to go"). On the fifth — and only the fifth — it offers the
+   **reward** email instead, and the coffee appears under **Ready to claim**.
+   Keep tapping to 10 and the pastry joins it: both sit there claimable at once,
+   while the stamps carry on counting toward whatever comes next.
+7. Tap **Redeem** on one of them. The balance drops by that reward's cost, the
+   other stays claimable, and the redemption is listed in Settings. Because
+   claiming spends the visits, that tier can be earned again — which is what
+   makes a 5-visit reward a repeating punch card rather than a one-off.
 
 ---
 
 ## Local development with the emulators
 
-The Emulator Suite is a fake Firebase running on your PC — no billing, no live
-data, and you can wipe it and start over.
+The Emulator Suite is a fake Firebase on your PC — no live data, nothing to
+clean up. Java is already installed (Microsoft OpenJDK 21).
 
-**It needs Java** — already installed on this machine (Microsoft OpenJDK 21). On a
-new machine: `winget install Microsoft.OpenJDK.21`, then reopen your terminal.
-
-Run two terminals in VS Code:
+Two terminals:
 
 ```bash
-npm run emulators     # terminal 1 — fake Firebase, UI at http://localhost:4000
-npx expo start        # terminal 2 — the app
+npm run emulators     # terminal 1 — UI at http://localhost:4000
+npx expo start        # terminal 2
 ```
 
-Use `npm run emulators`, not `firebase emulators:start` directly. The emulator
-gives your functions 10 seconds to load, and a cold `require` of `firebase-admin`
-on Windows takes longer than that — you get
-*"Cannot determine backend specification. Timeout after 10000"* and none of your
-functions register. The npm script sets `FUNCTIONS_DISCOVERY_TIMEOUT=120` to fix
-it. `npm run emulators:clean` does the same against a throwaway `demo-loyalty`
-project, which needs no Firebase login at all.
-
-Point the app at them by setting `EXPO_PUBLIC_USE_EMULATORS=1` in `.env` and
-restarting Expo with `npx expo start -c` (the `-c` clears the cache — env values
-are baked in at bundle time, so without it you will keep hitting live Firebase).
+Point the app at them with `EXPO_PUBLIC_USE_EMULATORS=1` in `.env`, then restart
+Expo with `npx expo start -c`.
 
 Testing on a **physical phone** against the emulators also needs your PC's LAN IP
 in `EXPO_PUBLIC_EMULATOR_HOST` — run `ipconfig` and use the IPv4 address.
 
-The Trigger Email extension does not run in the emulator. Emails you "send"
-locally just appear as documents in the emulated `mail` collection, which is
-usually what you want when testing.
-
-VS Code shortcut: **Ctrl+Shift+B** runs both terminals at once (see
-[.vscode/tasks.json](.vscode/tasks.json)).
-
 ---
 
-## Deploying changes later
+## If you ever upgrade to Blaze
 
-```bash
-firebase deploy --only functions          # changed functions/
-firebase deploy --only firestore:rules    # changed firestore.rules
-firebase deploy --only hosting            # changed public/
-```
+The server-side code is already written and tested — it is sitting in
+[functions/](functions/), unused. Turning it on would make signups instant and
+emails automatic, with no app changes.
 
-The app itself needs no deploy while you are using Expo Go — save a file and it
-hot-reloads on your phone. Building a real installable app comes later, with
-`eas build`.
+1. **⚙ → Usage and billing → Modify plan → Blaze.** Set a budget alert at R20
+   while you are there.
+2. Install the **Trigger Email** extension with a Brevo SMTP account
+   (free tier: 300 emails/day), pointed at the `mail` collection.
+3. Restore the function rewrites in `firebase.json`:
+   ```json
+   { "source": "/api/signup", "function": { "functionId": "submitSignup", "region": "us-central1" } },
+   { "source": "/api/business", "function": { "functionId": "getBusinessPublic", "region": "us-central1" } }
+   ```
+4. `firebase deploy` (without the `--only` flag).
+5. Point `public/join.html` back at `/api/signup` instead of the Firestore REST
+   API, and tighten the `signupRequests` create rule back to `if false`.
+
+Realistically a shop this size would sit at about R0/month on Blaze — the free
+allowance is 2M function calls and 50k Firestore reads a day. The reason to stay
+on Spark is not cost, it's not having a card on file.

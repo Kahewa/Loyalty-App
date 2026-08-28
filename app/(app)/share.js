@@ -1,11 +1,12 @@
 import { useRef, useState } from 'react';
-import { View, Text, Share, StyleSheet } from 'react-native';
+import { View, Text, Share } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 import * as Clipboard from 'expo-clipboard';
 import { useAuth } from '../../src/auth-context';
 import { firebaseConfig } from '../../src/firebase';
 import { Screen, Card, Button, Dim, Title } from '../../src/components/ui';
-import { colors, radius, spacing } from '../../src/theme';
+import { font, radius, shadow, spacing } from '../../src/theme';
+import { useTheme, useThemedStyles } from '../../src/theme-context';
 
 // Hosting gives you <project-id>.web.app for free; override it if you point a
 // custom domain at the site.
@@ -14,6 +15,8 @@ const BASE =
   (firebaseConfig.projectId ? `https://${firebaseConfig.projectId}.web.app` : '');
 
 export default function ShareScreen() {
+  const s = useThemedStyles(makeStyles);
+  const { colors } = useTheme();
   const { user, business } = useAuth();
   const [copied, setCopied] = useState(false);
   const qrRef = useRef(null);
@@ -93,7 +96,7 @@ export default function ShareScreen() {
   );
 }
 
-const s = StyleSheet.create({
+const makeStyles = ({ colors }) => ({
   qrFrame: { backgroundColor: '#FFFFFF', padding: spacing(2), borderRadius: radius.md },
   url: { color: colors.textDim, fontSize: 12, textAlign: 'center', fontFamily: 'monospace' },
   howTitle: { color: colors.text, fontSize: 16, fontWeight: '700', marginBottom: spacing(0.5) },

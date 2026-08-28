@@ -3,7 +3,8 @@
  *
  *   submitSignup       HTTPS  — the public join form posts here
  *   getBusinessPublic  HTTPS  — join page asks "whose card is this?"
- *   onEntryCreated     Trigger — watches every visit, queues the reward email
+ *   onEntryCreated     Trigger — every visit: queues the progress email, or
+ *                              the reward email on the visit that crosses the line
  *
  * Nothing here trusts the caller. The two HTTPS endpoints are reachable by
  * anyone on the internet, so they validate hard; the Admin SDK bypasses
@@ -17,7 +18,7 @@ const logger = require('firebase-functions/logger');
 const { initializeApp } = require('firebase-admin/app');
 const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 
-const { DEFAULT_TEMPLATES, render, toHtml } = require('./templates');
+const { DEFAULT_TEMPLATES, render, emailVars, toHtml } = require('./templates');
 
 // Modular imports rather than the `admin.firestore.FieldValue` namespace: that
 // namespace still exists in production but the Functions emulator swaps in its
@@ -107,12 +108,21 @@ exports.submitSignup = onRequest(async (req, res) => {
       source: 'signup',
     });
 
-    const vars = {
-      customer_name: cleanName,
-      business_name: business.businessName || 'us',
-      points_balance: '0',
-      reward_name: '',
-    };
+    // The welcome template can mention what a full card is worth, so it needs
+    // the active reward the same way the visit emails do.
+    const rewardSnap = await db
+      .collection(`users/${uid}/rewards`)
+      .where('active', '==', true)
+      .orderBy('pointsRequired')
+      .limit(1)
+      .get();
+
+    const vars = emailVars({
+      customer: { name: cleanName },
+      business,
+      reward: rewardSnap.empty ? null : rewardSnap.docs[0].data(),
+      balance: 0,
+    });
 
     await queueEmail({
       to: cleanEmail,
@@ -171,21 +181,39 @@ exports.onEntryCreated = onDocumentCreated(
     const balanceBefore = balanceAfter - points;
 
     try {
+      // Rewards run alongside each other, so this is every one still going —
+      // cheapest first — not just the nearest.
       const rewardSnap = await db
         .collection(`users/${uid}/rewards`)
         .where('active', '==', true)
         .orderBy('pointsRequired')
-        .limit(1)
         .get();
 
       if (rewardSnap.empty) return;
-      const reward = rewardSnap.docs[0].data();
-      const threshold = Number(reward.pointsRequired);
+      const active = rewardSnap.docs.map((d) => d.data());
 
       // The crossing test. Using before/after rather than "balance >= threshold"
-      // is what stops a second email on every visit past the line.
-      if (!(balanceBefore < threshold && balanceAfter >= threshold)) return;
+      // is what announces a reward exactly once instead of on every visit past
+      // the line. One visit can cross more than one if two share a total.
+      const crossed = active.filter((r) => {
+        const t = Number(r.pointsRequired);
+        return balanceBefore < t && balanceAfter >= t;
+      });
 
+      const earned = crossed.length > 0;
+      const kind = earned ? 'reward' : 'visit';
+
+      // What the email talks about: what was just won, or what is next up.
+      const next = active.find((r) => balanceAfter < Number(r.pointsRequired)) || null;
+      const subject = earned
+        ? { ...crossed[0], name: crossed.map((r) => r.name).join(' and ') }
+        : next;
+
+      // Nothing left to aim at and nothing just earned — say nothing.
+      if (!earned && !next) return;
+
+      // The owner can silence the every-visit progress note; earning the reward
+      // is always announced.
       const [customerSnap, businessSnap] = await Promise.all([
         db.doc(`users/${uid}/customers/${customerId}`).get(),
         db.doc(`users/${uid}`).get(),
@@ -196,31 +224,38 @@ exports.onEntryCreated = onDocumentCreated(
       const customer = customerSnap.data();
       const business = businessSnap.data();
 
+      if (!earned && business.emailOnVisit === false) return;
+
       if (!customer.email) {
-        logger.info('threshold crossed but no email on file', { uid, customerId });
+        logger.info('nothing to send — no email on file', { uid, customerId, kind });
         return;
       }
 
-      const vars = {
-        customer_name: customer.name || 'there',
-        business_name: business.businessName || 'us',
-        points_balance: String(balanceAfter),
-        reward_name: reward.name || 'your reward',
-      };
+      const vars = emailVars({
+        customer,
+        business,
+        reward: subject,
+        balance: balanceAfter,
+      });
+
+      const subjectKey = `${kind}EmailSubject`;
+      const bodyKey = `${kind}EmailBody`;
 
       await queueEmail({
         to: customer.email,
-        subject: render(
-          business.rewardEmailSubject || DEFAULT_TEMPLATES.rewardEmailSubject,
-          vars
-        ),
-        body: render(business.rewardEmailBody || DEFAULT_TEMPLATES.rewardEmailBody, vars),
+        subject: render(business[subjectKey] || DEFAULT_TEMPLATES[subjectKey], vars),
+        body: render(business[bodyKey] || DEFAULT_TEMPLATES[bodyKey], vars),
         businessName: vars.business_name,
       });
 
-      logger.info('reward email queued', { uid, customerId, threshold, balanceAfter });
+      logger.info(`${kind} email queued`, {
+        uid,
+        customerId,
+        balanceAfter,
+        crossed: crossed.map((r) => r.name),
+      });
     } catch (err) {
-      logger.error('reward check failed', err);
+      logger.error('visit email check failed', err);
     }
   }
 );

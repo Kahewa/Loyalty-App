@@ -1,9 +1,12 @@
 import { useState } from 'react';
-import { View, Text, Alert, KeyboardAvoidingView, Platform, StyleSheet } from 'react-native';
+import { View, Text, KeyboardAvoidingView, Platform } from 'react-native';
 import { Redirect } from 'expo-router';
 import { useAuth } from '../../src/auth-context';
-import { Screen, Card, Field, Button, Title, Dim } from '../../src/components/ui';
-import { colors, spacing } from '../../src/theme';
+import { showAlert } from '../../src/components/alert';
+import { useTheme, useThemedStyles } from '../../src/theme-context';
+import { font, radius, spacing } from '../../src/theme';
+import { Screen, Card, Field, Button, Dim } from '../../src/components/ui';
+import { Logo } from '../../src/components/logo';
 
 const MESSAGES = {
   'auth/invalid-email': 'That email address does not look right.',
@@ -14,10 +17,15 @@ const MESSAGES = {
   'auth/weak-password': 'Password must be at least 6 characters.',
   'auth/too-many-requests': 'Too many attempts. Wait a minute and try again.',
   'auth/network-request-failed': 'No connection to Firebase. Check your internet.',
+  'auth/operation-not-allowed':
+    'Email sign-in is not switched on for this Firebase project yet — see SETUP.md.',
 };
 
 export default function Login() {
   const { user, signIn, register, resetPassword } = useAuth();
+  const { colors } = useTheme();
+  const s = useThemedStyles(makeStyles);
+
   const [mode, setMode] = useState('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -49,7 +57,7 @@ export default function Login() {
     if (!email.trim()) return setError('Type your email above first, then tap this again.');
     try {
       await resetPassword(email);
-      Alert.alert('Check your inbox', `A reset link is on its way to ${email.trim()}.`);
+      showAlert('Check your inbox', `A reset link is on its way to ${email.trim()}.`);
     } catch (e) {
       setError(MESSAGES[e.code] || e.message);
     }
@@ -62,8 +70,8 @@ export default function Login() {
     >
       <Screen style={s.screen}>
         <View style={s.header}>
-          <Text style={s.mark}>◆</Text>
-          <Title style={s.brand}>Loyalty</Title>
+          <Logo size={92} />
+          <Text style={s.brand}>Loyalty Link</Text>
           <Dim style={{ textAlign: 'center' }}>
             Punch cards for your regulars, without the punch cards.
           </Dim>
@@ -108,7 +116,7 @@ export default function Login() {
             title={isRegister ? 'Create account' : 'Sign in'}
             onPress={submit}
             loading={busy}
-            style={{ marginTop: spacing(1) }}
+            style={{ marginTop: spacing(0.5) }}
           />
 
           <Button
@@ -131,15 +139,15 @@ export default function Login() {
   );
 }
 
-const s = StyleSheet.create({
+const makeStyles = ({ colors }) => ({
   screen: { justifyContent: 'center', flexGrow: 1, padding: spacing(2.5) },
-  header: { alignItems: 'center', gap: spacing(0.75), marginBottom: spacing(2) },
-  mark: { color: colors.accent, fontSize: 40 },
-  brand: { fontSize: 30, letterSpacing: -0.5 },
-  error: { color: colors.danger, fontSize: 14, marginTop: spacing(0.5) },
+  header: { alignItems: 'center', gap: spacing(0.5), marginBottom: spacing(2.5) },
+  brand: { ...font.display, color: colors.text, letterSpacing: 0.5, marginTop: spacing(0.5) },
+  error: { ...font.small, color: colors.danger, marginTop: spacing(0.5) },
   link: {
+    ...font.small,
     color: colors.accent,
-    fontSize: 14,
+    fontWeight: '700',
     textAlign: 'center',
     paddingVertical: spacing(1),
   },
